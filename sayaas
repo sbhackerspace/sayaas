@@ -1,0 +1,230 @@
+#!/usr/bin/python -tt
+
+# Copyright 2016 Garrett Holmstrom
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the
+# Free Software Foundation; either version 3 of the License or (at your
+# option) any later version accepted by the Santa Barbara Hackerspace (or
+# its successor approved by the Santa Barbara Hackerspace), which shall
+# act as a proxy as defined in Section 14 of version 3 of the license.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see http://www.gnu.org/licenses/.
+
+"""\
+A simple text-to-speech web service based on OS X's ``say'' command
+
+Available requests:
+    GET  /
+        Display general information about the service.
+
+
+    POST /v1/wave
+        Convert the supplied text to speech in WAV format.  Select
+        expected by Asterisk.
+
+        Parameters:
+            format: format of the audio data to generate, in the
+                    following format:
+
+                        [BE|LE](F|I|UI)(8|16|24|32|64)@[0-9]+
+
+                    This consists of endianness, data type, sample
+                    size, and sample rate.
+
+                    "asterisk" is a shortcut for LEI16@8000, the format
+                    expected by Asterisk.
+
+            voice:  name of the voice to use
+
+    GET  /v1/voices
+        Show a list of available voices.
+"""
+
+import argparse
+import os.path
+import re
+import shutil
+import subprocess
+import tempfile
+import traceback
+
+try:
+    import BaseHTTPServer as httpserver
+    import urlparse
+except ImportError:
+    import http.server as httpserver
+    import urllib.parse as urlparse
+
+
+__version__ = '0.1.0'
+
+DEFAULT_VOICE = 'alex'
+DEFAULT_WAV_FORMAT = 'LEI24@44100'
+MAX_REQUEST_LENGTH = 20480
+VOICES = [s.split()[0].lower() for s in subprocess.check_output(
+    ('say', '-v', '?')).decode('utf-8').splitlines()]
+
+
+class SayHTTPRequestHandler(httpserver.BaseHTTPRequestHandler):
+    """
+    SayaaS's HTTP request handler
+    """
+
+    protocol_version = 'HTTP/1.0'
+    server_version = 'SayaaS/{}'.format(
+        '.'.join(__version__.split('.')[:2]))
+
+    def do_POST(self):
+        """
+        Handle POST requests, the method for text-to-speech.
+        """
+        try:
+            if self.path == '/':
+                self.send_error(405)
+            elif self.path.startswith('/v1/wav'):
+                self.send_wav()
+            elif self.path.startswith('/v1/voices'):
+                self.send_error(405)
+            else:
+                self.send_error(404)
+        except:
+            traceback.print_exc()
+            self.send_error(500)
+
+    def send_wav(self, voice=None, data_format=None):
+        params = urlparse.parse_qs(urlparse.urlparse(self.path).query)
+        if not data_format:
+            data_format = params.get('format', [DEFAULT_WAV_FORMAT])[0]
+        if not validate_wav_format(data_format):
+            self.send_error(400, 'Invalid format')
+            return
+        if not voice:
+            voice = params.get('voice', [DEFAULT_VOICE])[0]
+        if voice.lower() not in VOICES:
+            self.send_error(400, 'Invalid voice')
+            return
+        try:
+            length = get_content_length(self.headers)
+        except KeyError:
+            self.send_error(411)
+            return
+        if length > MAX_REQUEST_LENGTH:
+            self.send_error(413)
+            return
+        text = self.rfile.read(length).decode('utf-8')
+        wav_filename = None
+        try:
+            wav_filename = convert_text_to_wav(
+                text, voice=voice, data_format=data_format)
+            headers = {
+                'Connection': 'close',
+                'Content-Length': os.path.getsize(wav_filename),
+                'Content-Type': 'audio/wav',
+                'X-Oh-Bill': is_oh_bill(text)
+            }
+            self.send_response(200)
+            for key, val in sorted(headers.items()):
+                self.send_header(key, val)
+            self.end_headers()
+            with open(wav_filename, 'rb') as wav_file:
+                shutil.copyfileobj(wav_file, self.wfile)
+        finally:
+            if wav_filename:
+                os.remove(wav_filename)
+
+    def do_GET(self):
+        """
+        Handle GET requests, generally for providing info to users.
+        """
+        try:
+            if self.path == '/':
+                self.send_response(200)
+                self.send_header('Connection', 'close')
+                self.send_header('Content-Type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(__doc__.encode('utf-8'))
+            elif self.path.startswith('/v1/asterisk'):
+                self.send_error(405)
+            elif self.path.startswith('/v1/voices'):
+                self.send_response(200)
+                self.send_header('Connection', 'close')
+                self.send_header('Content-Type', 'text/plain')
+                self.end_headers()
+                for voice in sorted(VOICES):
+                    self.wfile.write(voice.encode('utf-8') + b'\n')
+            else:
+                self.send_error(404)
+        except:
+            traceback.print_exc()
+            self.send_error(500)
+
+
+def convert_text_to_wav(text, voice=DEFAULT_VOICE,
+                        data_format=DEFAULT_WAV_FORMAT):
+    """
+    Feed some text to the ``say'' command and return the name of a WAV
+    file containing its output.
+    """
+    if data_format == 'asterisk':
+        data_format = 'LEI16@8000'
+    input_file, input_filename = tempfile.mkstemp(text=True)
+    with os.fdopen(input_file, 'w') as input_file:
+        input_file.write(text)
+    output_file, output_filename = tempfile.mkstemp(suffix='.wav')
+    os.close(output_file)
+    subprocess.check_call(('/usr/bin/say', '-f', input_filename, '-o',
+                           output_filename, '--file-format', 'WAVE',
+                           '--data-format', data_format))
+    return output_filename
+
+
+def get_content_length(headers):
+    """
+    Get the value of the Content-Length header in a dict.  If none
+    exists, raise a KeyError.
+    """
+    for key, val in headers.items():
+        if key.lower() == 'content-length':
+            return int(val)
+    raise KeyError('No Content-Length header found')
+
+
+def is_oh_bill(text):
+    """
+    This is an inside joke.  Don't think about it too hard.
+    """
+    return bool(re.search(r'o+h+\s*bill', text.lower()))
+
+
+def validate_wav_format(data_format):
+    if data_format == 'asterisk':
+        return True
+    if re.match('([BL]E)?(F|U?I)(8|16|24|32|64)@[0-9]+', data_format):
+        # This isn't perfect, but it's quick and easy.
+        return True
+    return False
+
+
+def main():
+    """
+    Read command line options and start the web service.
+    """
+    parser = argparse.ArgumentParser(
+        description='web service wrapper for the ``say\'\' command')
+    parser.add_argument('-b', '--bind-addr', default='0.0.0.0')
+    parser.add_argument('-p', '--port', type=int, default=8080)
+    args = parser.parse_args()
+    httpd = httpserver.HTTPServer((args.bind_addr, args.port),
+                                  SayHTTPRequestHandler)
+    httpd.serve_forever()
+
+
+if __name__ == '__main__':
+    main()

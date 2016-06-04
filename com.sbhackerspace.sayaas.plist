@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>Label</key>
+        <string>com.sbhackerspace.sayaas</string>
+        <key>UserName</key>
+        <string>nobody</string>
+        <key>GroupName</key>
+        <string>nobody</string>
+        <key>Nice</key>
+        <integer>10</integer>
+        <key>KeepAlive</key>
+        <true/>
+        <key>RunAtLoad</key>
+        <true/>
+        <key>ProgramArguments</key>
+        <array>
+            <string>/usr/local/bin/sayaas</string>
+            <string>-b</string>
+            <string>0.0.0.0</string>
+            <string>-p</string>
+            <string>8080</string>
+        </array>
+        <key>ProcessType</key>
+        <string>Background</string>
+    </dict>
+</plist>

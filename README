@@ -1,0 +1,43 @@
+SayaaS - Say as a Service
+=========================
+
+Overview
+--------
+
+Do you enjoy making computers or phones talk?  Have you ever needed a
+text-to-speech engine that doesn't sound terrible?  Do you have an old
+Mac lying around somewhere, with nothing to do?
+
+Introducing SayaaS, the Say command as a Service!
+
+The sayaas script is a simple web service wrapper around OS X's say(1)
+command.  It is perfect for use as the text-to-speech engine for an
+Asterisk phone system, as it is capable of directly creating output that
+meets Asterisk's rather strict requirements for WAV file formatting,
+while yielding speech that is far more intelligible over the phone than
+output from the text-to-speech programs available natively on FreePBX.
+
+Installation
+------------
+
+SayaaS is designed to be extremely simple and easy to set up, so it is
+a standalone python script with no dependencies outside of the say(1)
+command and the python standard library.  Simply copy it wherever it is
+needed and run it from there.
+
+For the sake of convenience, this source tree also includes a
+launchd.plist(5) file as well as a Makefile that can install sayaas for
+use as a system service.
+
+API
+---
+
+GET  /
+    Display general information about the service.
+
+POST /v1/asterisk[?voice=VOICE]
+    Convert the supplied text to speech in the 8kbps WAV format
+    expected by Asterisk.
+
+GET  /v1/voices
+    Show a list of available voices.
