@@ -35,9 +35,23 @@ API
 GET  /
     Display general information about the service.
 
-POST /v1/asterisk[?voice=VOICE]
-    Convert the supplied text to speech in the 8kbps WAV format
+POST /v1/wav
+    Convert the supplied text to speech in WAV format.  Select
     expected by Asterisk.
+
+    Parameters:
+        format: format of the audio data to generate, in the
+                following format:
+
+                    [BE|LE](F|I|UI)(8|16|24|32|64)@[0-9]+
+
+                This consists of endianness, data type, sample
+                size, and sample rate.
+
+                "asterisk" is a shortcut for LEI16@8000, the format
+                expected by Asterisk.
+
+        voice:  name of the voice to use
 
 GET  /v1/voices
     Show a list of available voices.

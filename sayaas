@@ -25,7 +25,7 @@ Available requests:
         Display general information about the service.
 
 
-    POST /v1/wave
+    POST /v1/wav
         Convert the supplied text to speech in WAV format.  Select
         expected by Asterisk.
 
