@@ -179,8 +179,8 @@ def convert_text_to_wav(text, voice=DEFAULT_VOICE,
         input_file.write(text)
     output_file, output_filename = tempfile.mkstemp(suffix='.wav')
     os.close(output_file)
-    subprocess.check_call(('/usr/bin/say', '-f', input_filename, '-o',
-                           output_filename, '--file-format', 'WAVE',
+    subprocess.check_call(('/usr/bin/say', '-v', voice, '-f', input_filename,
+                           '-o', output_filename, '--file-format', 'WAVE',
                            '--data-format', data_format))
     return output_filename
 
