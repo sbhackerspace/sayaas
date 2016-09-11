@@ -63,7 +63,7 @@ except ImportError:
     import urllib.parse as urlparse
 
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
 DEFAULT_VOICE = 'alex'
 DEFAULT_WAV_FORMAT = 'LEI24@44100'
